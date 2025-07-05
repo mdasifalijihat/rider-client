@@ -20,8 +20,8 @@ const Register = () => {
 
   const onSubmit = (data) => {
     createUser(data.email, data.password)
-      .then((result) => {
-        console.log(result.user)        
+      .then((result) => {   
+        console.log(result.user)          
         updateUserProfile({ displayName: data.name })
           .then(() => {
             reset(); 

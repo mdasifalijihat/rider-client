@@ -1,8 +1,9 @@
 import React from "react";
 import { useForm } from "react-hook-form";
 import Swal from "sweetalert2";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import SocialLogin from "../SocailLogin/SocialLogin";
+import useAuth from "../../../hooks/useAuth";
 
 const Login = () => {
   const {
@@ -11,24 +12,32 @@ const Login = () => {
     formState: { errors },
   } = useForm();
 
-  const onSubmit = async (data) => {
-    try {
-      await (data.email, data.password);
-      Swal.fire({
-        icon: "success",
-        title: "Login Successful!",
-        text: "You have successfully logged in.",
-        showConfirmButton: false,
-        timer: 1500,
+  const { userLogin } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/";
+
+  const onSubmit = (data) => {
+    userLogin(data.email, data.password)
+      .then((result) => {
+        console.log(result.user);
+        Swal.fire({
+          icon: "success",
+          title: "Login Successful!",
+          text: "You have successfully logged in.",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+
+        navigate(from, { replace: true }); // ✅ Redirect after login
+      })
+      .catch((error) => {
+        Swal.fire({
+          icon: "error",
+          title: "Login Failed",
+          text: error.message,
+        });
       });
-      // Redirect or handle successful login here
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Login Failed",
-        text: error.message,
-      });
-    }
   };
 
   return (
@@ -100,14 +109,12 @@ const Login = () => {
             </div>
 
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-blue-600 hover:text-blue-500"
-                >
-                  Forget Password?
-                </Link>
-              </div>
+              <Link
+                to="/forgot-password"
+                className="text-sm text-blue-600 hover:text-blue-500"
+              >
+                Forgot Password?
+              </Link>
             </div>
 
             <div>
@@ -130,11 +137,11 @@ const Login = () => {
               </div>
             </div>
 
-            <SocialLogin></SocialLogin>
+            <SocialLogin />
 
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
-                Don't have any account?{" "}
+                Don’t have an account?{" "}
                 <Link
                   to="/register"
                   className="font-medium text-blue-600 hover:text-blue-500"
