@@ -11,7 +11,7 @@ import FaqBanner from '../FaqBanner/FaqBanner';
 const Home = () => {
     return (
         <div>
-            <Banner></Banner>
+            <div className='py-2'><Banner></Banner></div>
             <WorkBanner></WorkBanner>
             <OurSerBanner></OurSerBanner>
             <TeamsSales></TeamsSales>
