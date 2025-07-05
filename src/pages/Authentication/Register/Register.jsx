@@ -1,29 +1,65 @@
-import React from 'react';
-import { useForm } from 'react-hook-form';
-import Swal from 'sweetalert2';
-import { Link } from 'react-router';
-import SocialLogin from '../SocailLogin/SocialLogin';
+import React from "react";
+import { useForm } from "react-hook-form";
+import Swal from "sweetalert2";
+import { Link, useLocation, useNavigate } from "react-router";
+import SocialLogin from "../SocailLogin/SocialLogin";
+import useAuth from "../../../hooks/useAuth";
 
 const Register = () => {
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const {
+    register,
+    handleSubmit,
+    reset, 
+    formState: { errors },
+  } = useForm();
 
-  const onSubmit = async () => {
-    try {     
-      Swal.fire({
-        icon: 'success',
-        title: 'Registration Successful!',
-        text: 'Your account has been created successfully.',
-        showConfirmButton: false,
-        timer: 1500
+  const { createUser, updateUserProfile } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/";
+
+  const onSubmit = (data) => {
+    createUser(data.email, data.password)
+      .then((result) => {
+        console.log(result.user)        
+        updateUserProfile({ displayName: data.name })
+          .then(() => {
+            reset(); 
+            Swal.fire({
+              icon: "success",
+              title: "Registration Successful!",
+              text: "Your account has been created successfully.",
+              showConfirmButton: false,
+              timer: 1500,
+            });
+
+            navigate(from, { replace: true });
+          })
+          .catch((error) => {
+            console.error("Profile update failed:", error);
+            Swal.fire({
+              icon: "error",
+              title: "Profile Update Failed",
+              text: "Your account was created, but we couldn't save your name.",
+            });
+          });
+      })
+      .catch((error) => {
+        console.error("Registration error:", error);
+        let errorMessage = "Registration failed. Please try again.";
+
+        if (error.code === "auth/email-already-in-use") {
+          errorMessage = "This email is already registered.";
+        } else if (error.code === "auth/weak-password") {
+          errorMessage = "Password should be at least 6 characters.";
+        }
+
+        Swal.fire({
+          icon: "error",
+          title: "Registration Failed",
+          text: errorMessage,
+        });
       });
-      // Redirect or handle successful registration here
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Registration Failed',
-        text: error.message,
-      });
-    }
   };
 
   return (
@@ -51,7 +87,7 @@ const Register = () => {
                   type="text"
                   autoComplete="name"
                   {...register("name", { required: "Name is required" })}
-                  className={`input input-bordered w-full ${errors.name ? 'input-error' : ''}`}
+                  className={`input input-bordered w-full ${errors.name ? "input-error" : ""}`}
                 />
                 {errors.name && (
                   <p className="mt-2 text-sm text-red-600">{errors.name.message}</p>
@@ -69,14 +105,14 @@ const Register = () => {
                   name="email"
                   type="email"
                   autoComplete="email"
-                  {...register("email", { 
+                  {...register("email", {
                     required: "Email is required",
                     pattern: {
                       value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: "Invalid email address"
-                    }
+                      message: "Invalid email address",
+                    },
                   })}
-                  className={`input input-bordered w-full ${errors.email ? 'input-error' : ''}`}
+                  className={`input input-bordered w-full ${errors.email ? "input-error" : ""}`}
                 />
                 {errors.email && (
                   <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
@@ -94,14 +130,14 @@ const Register = () => {
                   name="password"
                   type="password"
                   autoComplete="new-password"
-                  {...register("password", { 
+                  {...register("password", {
                     required: "Password is required",
                     minLength: {
                       value: 6,
-                      message: "Password must be at least 6 characters"
-                    }
+                      message: "Password must be at least 6 characters",
+                    },
                   })}
-                  className={`input input-bordered w-full ${errors.password ? 'input-error' : ''}`}
+                  className={`input input-bordered w-full ${errors.password ? "input-error" : ""}`}
                 />
                 {errors.password && (
                   <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
@@ -125,9 +161,7 @@ const Register = () => {
                 <div className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  Or continue with
-                </span>
+                <span className="px-2 bg-white text-gray-500">Or continue with</span>
               </div>
             </div>
 
@@ -137,7 +171,7 @@ const Register = () => {
 
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
-                Already have an account?{' '}
+                Already have an account?{" "}
                 <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
                   Login
                 </Link>
