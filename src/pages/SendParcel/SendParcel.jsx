@@ -4,10 +4,12 @@ import axios from "axios";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useLoaderData } from "react-router";
+import useAuth from "../../hooks/useAuth";
 
 const SendParcel = () => {
   const districts = useLoaderData();
-  
+  const { user } = useAuth();
+
   /* ---------------- form ---------------- */
   const {
     register,
@@ -24,8 +26,8 @@ const SendParcel = () => {
   const [costBreakdown, setCostBreakdown] = useState("");
 
   /* ---------------- dropdown data ---------------- */
-  const [regions, setRegions] = useState([]); 
-  const [serviceCenters, setServiceCenters] = useState([]); 
+  const [regions, setRegions] = useState([]);
+  const [serviceCenters, setServiceCenters] = useState([]);
 
   /* -------- transform loader data once -------- */
   useEffect(() => {
@@ -45,19 +47,30 @@ const SendParcel = () => {
         id: `${d.region}-${idx}-${area}`,
         name: area,
         regionName: d.region,
-        regionId: regionObjects.find(r => r.name === d.region)?.id || 0
+        regionId: regionObjects.find((r) => r.name === d.region)?.id || 0,
       }))
     );
     setServiceCenters(centers);
   }, [districts]);
 
   /* -------- helpers -------- */
-  const senderRegion = watch("senderRegion");  
+  const senderRegion = watch("senderRegion");
   const receiverRegion = watch("receiverRegion");
+  const parcelType = watch("parcelType");
+
+  const generateTrackingNumber = () => {
+    const prefix = "TRK";
+    const randomNum = Math.floor(100000 + Math.random() * 900000);
+    return `${prefix}${randomNum}`;
+  };
 
   const calculateCost = (data) => {
-    const senderCenter = serviceCenters.find((sc) => sc.id === data.senderServiceCenter);
-    const receiverCenter = serviceCenters.find((sc) => sc.id === data.receiverServiceCenter);
+    const senderCenter = serviceCenters.find(
+      (sc) => sc.id === data.senderServiceCenter
+    );
+    const receiverCenter = serviceCenters.find(
+      (sc) => sc.id === data.receiverServiceCenter
+    );
 
     let cost = 0;
     const breakdown = [];
@@ -77,14 +90,26 @@ const SendParcel = () => {
       const extraWeightCost = Math.max(0, weight - 1) * 20;
       if (extraWeightCost > 0) {
         cost += extraWeightCost;
-        breakdown.push(`⚖️ Extra Weight Charge: ৳${extraWeightCost} (for ${weight}kg)`);
+        breakdown.push(
+          `⚖️ Extra Weight Charge: ৳${extraWeightCost} (for ${weight}kg)`
+        );
       }
     }
 
     // inter-region cost
-    if (senderCenter && receiverCenter && senderCenter.regionName !== receiverCenter.regionName) {
+    if (
+      senderCenter &&
+      receiverCenter &&
+      senderCenter.regionName !== receiverCenter.regionName
+    ) {
       cost += 150;
       breakdown.push("🚚 Inter-Region Delivery Charge: ৳150");
+    }
+
+    // insurance cost
+    if (data.insurance) {
+      cost += 50;
+      breakdown.push("🛡️ Insurance: ৳50");
     }
 
     return {
@@ -106,20 +131,45 @@ const SendParcel = () => {
       const formData = {
         ...watch(),
         cost: deliveryCost,
+        createdBy: user.email,
         status: "pending",
-        creation_date: new Date().toISOString(),
+        paymentStatus: "unpaid",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        trackingNumber: generateTrackingNumber(),
+        statusHistory: [
+          {
+            status: "pending",
+            timestamp: new Date().toISOString(),
+            location: watch("senderServiceCenter"),
+          },
+        ],
+        ...(parcelType === "non-document" && {
+          dimensions: {
+            length: watch("length"),
+            width: watch("width"),
+            height: watch("height"),
+            weight: watch("weight"),
+          },
+        }),
+        options: {
+          signatureRequired: watch("signatureRequired") || false,
+          insurance: watch("insurance") || false,
+          deliverySpeed: watch("deliverySpeed") || "standard",
+        },
       };
 
       await axios.post("/api/parcels", formData);
 
       toast.success(
-        `✅ Parcel Created Successfully!\n\nTotal Cost: ৳${deliveryCost}\n\nBreakdown:\n${costBreakdown}`,
-        { autoClose: 6000 }
+        `✅ Parcel Created Successfully!\n\nTracking Number: ${formData.trackingNumber}\nTotal Cost: ৳${deliveryCost}\n\nBreakdown:\n${costBreakdown}`,
+        { autoClose: 8000 }
       );
 
       reset();
       setShowConfirmation(false);
     } catch (error) {
+      console.error("Parcel submission error:", error);
       toast.error(
         error.response?.data?.message || "❌ Failed to create parcel"
       );
@@ -164,12 +214,12 @@ const SendParcel = () => {
               <label className="block mb-1 font-medium">Title*</label>
               <input
                 type="text"
-                {...register("title", { 
+                {...register("title", {
                   required: "Required",
                   minLength: {
                     value: 3,
-                    message: "Title must be at least 3 characters"
-                  }
+                    message: "Title must be at least 3 characters",
+                  },
                 })}
                 className="input input-bordered w-full"
               />
@@ -180,19 +230,19 @@ const SendParcel = () => {
               )}
             </div>
 
-            {watch("parcelType") === "non-document" && (
+            {parcelType === "non-document" && (
               <div>
                 <label className="block mb-1 font-medium">Weight (kg)*</label>
                 <input
                   type="number"
                   step="0.1"
                   min="0.1"
-                  {...register("weight", { 
+                  {...register("weight", {
                     required: "Weight is required for non-documents",
                     min: {
                       value: 0.1,
-                      message: "Weight must be at least 0.1kg"
-                    }
+                      message: "Weight must be at least 0.1kg",
+                    },
                   })}
                   className="input input-bordered w-full"
                 />
@@ -204,6 +254,100 @@ const SendParcel = () => {
               </div>
             )}
           </div>
+
+          {parcelType === "non-document" && (
+            <>
+              <div className="grid grid-cols-3 gap-4 mt-4">
+                <div>
+                  <label className="block mb-1 font-medium">Length (cm)</label>
+                  <input
+                    type="number"
+                    {...register("length", {
+                      min: {
+                        value: 1,
+                        message: "Length must be at least 1cm",
+                      },
+                    })}
+                    className="input input-bordered w-full"
+                    min="1"
+                  />
+                  {errors.length && (
+                    <p className="text-error text-sm mt-1">
+                      {errors.length.message}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Width (cm)</label>
+                  <input
+                    type="number"
+                    {...register("width", {
+                      min: {
+                        value: 1,
+                        message: "Width must be at least 1cm",
+                      },
+                    })}
+                    className="input input-bordered w-full"
+                    min="1"
+                  />
+                  {errors.width && (
+                    <p className="text-error text-sm mt-1">
+                      {errors.width.message}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Height (cm)</label>
+                  <input
+                    type="number"
+                    {...register("height", {
+                      min: {
+                        value: 1,
+                        message: "Height must be at least 1cm",
+                      },
+                    })}
+                    className="input input-bordered w-full"
+                    min="1"
+                  />
+                  {errors.height && (
+                    <p className="text-error text-sm mt-1">
+                      {errors.height.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <label className="block mb-1 font-medium">Delivery Options</label>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    {...register("signatureRequired")}
+                    className="checkbox checkbox-primary mr-2"
+                  />
+                  <span>Signature Required</span>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    {...register("insurance")}
+                    className="checkbox checkbox-primary mr-2"
+                  />
+                  <span>Add Insurance (+৳50)</span>
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">Delivery Speed</label>
+                  <select
+                    {...register("deliverySpeed")}
+                    className="select select-bordered w-full"
+                  >
+                    <option value="standard">Standard (3-5 days)</option>
+                    <option value="express">Express (1-2 days)</option>
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* --- Sender Info --- */}
@@ -214,12 +358,12 @@ const SendParcel = () => {
               <label className="block mb-1 font-medium">Name*</label>
               <input
                 type="text"
-                {...register("senderName", { 
+                {...register("senderName", {
                   required: "Required",
                   minLength: {
                     value: 3,
-                    message: "Name must be at least 3 characters"
-                  }
+                    message: "Name must be at least 3 characters",
+                  },
                 })}
                 className="input input-bordered w-full"
               />
@@ -297,12 +441,12 @@ const SendParcel = () => {
             <div className="md:col-span-2">
               <label className="block mb-1 font-medium">Address*</label>
               <textarea
-                {...register("senderAddress", { 
+                {...register("senderAddress", {
                   required: "Required",
                   minLength: {
                     value: 10,
-                    message: "Address must be at least 10 characters"
-                  }
+                    message: "Address must be at least 10 characters",
+                  },
                 })}
                 rows={3}
                 className="textarea textarea-bordered w-full"
@@ -337,12 +481,12 @@ const SendParcel = () => {
               <label className="block mb-1 font-medium">Name*</label>
               <input
                 type="text"
-                {...register("receiverName", { 
+                {...register("receiverName", {
                   required: "Required",
                   minLength: {
                     value: 3,
-                    message: "Name must be at least 3 characters"
-                  }
+                    message: "Name must be at least 3 characters",
+                  },
                 })}
                 className="input input-bordered w-full"
               />
@@ -420,12 +564,12 @@ const SendParcel = () => {
             <div className="md:col-span-2">
               <label className="block mb-1 font-medium">Address*</label>
               <textarea
-                {...register("receiverAddress", { 
+                {...register("receiverAddress", {
                   required: "Required",
                   minLength: {
                     value: 10,
-                    message: "Address must be at least 10 characters"
-                  }
+                    message: "Address must be at least 10 characters",
+                  },
                 })}
                 rows={3}
                 className="textarea textarea-bordered w-full"
